@@ -1,40 +1,31 @@
 use std::fmt;
+use std::sync::atomic::AtomicUsize;
 
-// Notes:
-// Assign an ID to every element upon creation,
-// use ID to select an element in the tree
-// e.g. UI.get("main-btn")
-macro_rules! uvec2 {
-    [$x:ty, $y:ty] => {
-        UVec2::new(x, y)
-    }
+pub trait NodeType {
+	fn node_type(&self) -> &str;
 }
 
-pub struct UVec2 {
-    pub x: u32,
-    pub y: u32
-}
-
-impl UVec2 {
-    pub fn new(x: u32, y: u32) -> UVec2 {
-        UVec2 { x, y }
-    }
-}
-
-impl fmt::Debug for UVec2 {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "UVec2({}, {})", self.x, self.y)
-    }
+#[derive(Debug)]
+pub enum Element {
+	ChildLayout(Layout),
+	ChildComponent(Box<dyn Component>)
 }
 
 #[derive(Debug)]
 pub struct Layout
 {
-    elements: Option<Vec<Box<dyn Component>>>,
-    child_layouts: Option<Vec<Layout>>,
+    // elements: Option<Vec<Box<dyn Component>>>,
+    // child_layouts: Option<Vec<Layout>>,
+    elements: Vec<Element>,
     layout_type: LayoutType,
     proportions: Vec<u32>,
-    padding: Vec<u32>
+    padding: Vec<u32>,
+}
+
+impl NodeType for Layout {
+	fn node_type(&self) -> &str {
+		"Layout"
+	}
 }
 
 #[derive(Debug)]
@@ -47,55 +38,42 @@ pub enum LayoutType {
 
 impl Layout {
     pub fn empty() -> Layout {
+    	// let id = VAL_CNT.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         Layout {
-            elements: None,
-            child_layouts: None,
+            elements: vec![],
             layout_type: LayoutType::Column,
             proportions: vec![1],
-            padding: vec![0]
+            padding: vec![0],
         }
     }
 
     pub fn new_rows<const N: usize>(proportions: [u32; N]) -> Layout {
+    	// let id = VAL_CNT.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         Layout {
-            elements: Some(vec![]),
-            child_layouts: None,
+            elements: vec![],
             layout_type: LayoutType::Row,
             proportions: proportions.to_vec(),
-            padding: vec![0]
+            padding: vec![0],
         }
     }
     
     pub fn new_columns<const N: usize>(proportions: [u32; N]) -> Layout {
+    	// let id = VAL_CNT.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         Layout {
-            elements: Some(vec![]),
-            child_layouts: None,
+            elements: vec![],
             layout_type: LayoutType::Column,
             proportions: proportions.to_vec(),
-            padding: vec![0]
+            padding: vec![0],
         }
     }
     
     pub fn add_element<C: Component + 'static>(&mut self, component: C) {
-        // If child nodes are None, then make a 
-        // vec to push the component into,
-        // otherwise, do nothing
-        match self.elements.as_mut() {
-            None => self.elements = Some(vec![]),
-            Some(_) => ()
-        }
-        self.elements.as_mut().unwrap().push(Box::new(component));
+        let boxed_component = Element::ChildComponent(Box::new(component));
+        self.elements.push(boxed_component);
     }
     
     pub fn add_layout(&mut self, layout: Layout) {
-        // If child layouts are None, then make a 
-        // vec to push the component into,
-        // otherwise, do nothing
-        match self.child_layouts.as_mut() {
-            None => self.child_layouts = Some(vec![]),
-            Some(_) => ()
-        }
-        self.child_layouts.as_mut().unwrap().push(layout);
+        self.elements.push(Element::ChildLayout(layout));
     }
     
     pub fn set_layout<const N: usize>(&mut self, proportions: [u32; N]) {
@@ -114,9 +92,14 @@ impl Layout {
     // of each component based on the
     // layout tree and propagate the
     // location to each component
-    fn calculate_locations(&mut self) {}
+    fn calculate_locations(&mut self) {
+
+    }
     
-    pub fn render(&mut self) {}
+    pub fn render(&mut self) {
+        // TODO
+        self.calculate_locations();
+    }
 }
 
 #[derive(Debug)]
@@ -125,6 +108,12 @@ pub struct UI
     width: u32,
     height: u32,
     elements: Layout
+}
+
+impl NodeType for UI {
+	fn node_type(&self) -> &str {
+		"UI"
+	}
 }
 
 impl UI
@@ -151,26 +140,38 @@ impl UI
         self.elements.add_element(element)
     }
     
-    pub fn add_layout(&mut self, layout: Layout) {
+    pub fn add_layout_container(&mut self, layout: Layout) {
         self.elements.add_layout(layout);
     }
     
     pub fn set_padding(&mut self, padding: [u32; 4]) {
         self.elements.set_padding(padding);
     }
+
+    pub fn to_graphviz(&self) {
+    	// self.elements.
+    }
 }
 
 
 pub struct Button {
     label: String,
-    location: Option<UVec2>
+    location: Option<(f32, f32)>,
+    dimensions: Option<(f32, f32)>, // (width, height)
+}
+
+impl NodeType for Button {
+	fn node_type(&self) -> &str {
+		"Button"
+	}
 }
 
 impl Button {
     pub fn new(label: &str) -> Button {
         Button {
             label: label.to_string(),
-            location: None
+            location: None,
+            dimensions: None,
         }
     }
 }
@@ -180,27 +181,35 @@ impl Component for Button {
         "Button"
     }
     
-    fn set_computed_location(&mut self, location: UVec2) {
+    fn set_computed_location(&mut self, location: (f32, f32)) {
         self.location = Some(location)
     }
     
-    fn get_computed_location(&self) -> Option<&UVec2> {
+    fn get_computed_location(&self) -> Option<&(f32, f32)> {
         self.location.as_ref()
     }
 }
 
 pub struct Label {
     name: String,
-    location: Option<UVec2>
+    location: Option<(f32, f32)>,
+    dimensions: Option<(f32, f32)>,
 }
 
 impl Label {
     pub fn new(name: &str) -> Label {
         Label {
             name: name.to_string(),
-            location: None
+            location: None,
+            dimensions: None,
         }
     }
+}
+
+impl NodeType for Label {
+	fn node_type(&self) -> &str {
+		"Label"
+	}
 }
 
 impl Component for Label {
@@ -208,20 +217,21 @@ impl Component for Label {
         "Label"
     }
     
-    fn set_computed_location(&mut self, location: UVec2) {
+    fn set_computed_location(&mut self, location: (f32, f32)) {
         self.location = Some(location)
     }
     
-    fn get_computed_location(&self) -> Option<&UVec2> {
+    fn get_computed_location(&self) -> Option<&(f32, f32)> {
         self.location.as_ref()
     }
 }
 
 pub trait Component {
     fn name(&self) -> &'static str;
-    fn set_computed_location(&mut self, location: UVec2);
-    fn get_computed_location(&self) -> Option<&UVec2>;
-    // fn on_draw(&self); will be implemented with drawing backend
+    fn set_computed_location(&mut self, location: (f32, f32));
+    fn get_computed_location(&self) -> Option<&(f32, f32)>;
+    // will be implemented with elara-gfx drawing backend
+    // fn draw(&self, tr: TextRenderer, lr: LineRenderer, rr: RectRenderer); 
 }
 
 impl fmt::Debug for dyn Component {
